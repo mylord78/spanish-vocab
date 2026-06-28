@@ -1,11 +1,6 @@
 const SHEET_ID = '1BxCgeiRRX2gfYTRqT7vCAZmTWXZuVPPFND27SA0tqSo';
-// gviz API는 특정 크기 초과 범위를 병합 처리함 → 정상 작동하는 범위로 분할
-const RANGES = [
-  'A2:C100','A101:C199','A200:C298',
-  'A299:C318','A319:C325','A326:C338',
-  'A339:C358','A359:C378',
-  'A379:C382'
-];
+const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
+const CHUNK = 99;
 const QUIZ_SIZE = 10;
 
 let words = [];
@@ -46,15 +41,42 @@ function parseCSV(text) {
   return rows;
 }
 
+// gviz API가 범위가 너무 크거나 특정 셀 조합에서 행을 하나로 병합하는 버그가 있음.
+// 탐지1: 첫 번째 스페인어 셀이 비정상적으로 길 때 (명백한 병합)
+// 탐지2: 요청 행 수 대비 반환 행 수가 95% 미만일 때 (미묘한 병합)
+// 단일 행까지 분할해서 병합을 피함
+async function fetchChunk(startRow, endRow) {
+  const text = await fetch(`${SHEET_URL}&range=A${startRow}:C${endRow}`).then(r => r.text());
+  const rows = parseCSV(text).filter(r => r[0] && r[1]);
+  const firstSpanish = (rows[0]?.[0] ?? '').replace(/[\n\r]/g, ' ');
+  const rangeSize = endRow - startRow + 1;
+  const isMerged = endRow > startRow && rows.length > 0 && (
+    firstSpanish.length > 100 ||
+    rows.length < rangeSize * 0.95
+  );
+  if (isMerged) {
+    const mid = Math.floor((startRow + endRow) / 2);
+    const [a, b] = await Promise.all([fetchChunk(startRow, mid), fetchChunk(mid + 1, endRow)]);
+    return [...a, ...b];
+  }
+  return rows
+    .map(r => ({ spanish: r[0].split('\n')[0].trim(), korean: r[1].split('\n')[0].trim(), alt: r[2] || '' }))
+    .filter(w => w.spanish && w.korean);
+}
+
 async function loadWords() {
   try {
-    const base = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&range=`;
-    const texts = await Promise.all(RANGES.map(r => fetch(base + r).then(res => res.text())));
-    words = texts.flatMap(text =>
-      parseCSV(text)
-        .filter(r => r[0] && r[1])
-        .map(r => ({ spanish: r[0], korean: r[1], alt: r[2] || '' }))
-    );
+    const allWords = [];
+    for (let start = 2; ; start += CHUNK * 3) {
+      const [a, b, c] = await Promise.all([
+        fetchChunk(start, start + CHUNK - 1),
+        fetchChunk(start + CHUNK, start + CHUNK * 2 - 1),
+        fetchChunk(start + CHUNK * 2, start + CHUNK * 3 - 1)
+      ]);
+      allWords.push(...a, ...b, ...c);
+      if (c.length === 0) break; // 데이터가 연속적이므로 마지막 청크가 비면 종료
+    }
+    words = allWords;
     startSession();
   } catch (e) {
     document.getElementById('loadingMsg').textContent = '단어를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.';
