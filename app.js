@@ -1,5 +1,11 @@
 const SHEET_ID = '1BxCgeiRRX2gfYTRqT7vCAZmTWXZuVPPFND27SA0tqSo';
-const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
+// gviz API는 특정 크기 초과 범위를 병합 처리함 → 정상 작동하는 범위로 분할
+const RANGES = [
+  'A2:C100','A101:C199','A200:C298',
+  'A299:C318','A319:C325','A326:C338',
+  'A339:C358','A359:C378',
+  'A379:C382'
+];
 const QUIZ_SIZE = 10;
 
 let words = [];
@@ -42,13 +48,13 @@ function parseCSV(text) {
 
 async function loadWords() {
   try {
-    const res = await fetch(CSV_URL);
-    const text = await res.text();
-    const rows = parseCSV(text);
-    words = rows
-      .slice(1)
-      .filter(r => r[0] && r[1])
-      .map(r => ({ spanish: r[0], korean: r[1], alt: r[2] || '' }));
+    const base = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&range=`;
+    const texts = await Promise.all(RANGES.map(r => fetch(base + r).then(res => res.text())));
+    words = texts.flatMap(text =>
+      parseCSV(text)
+        .filter(r => r[0] && r[1])
+        .map(r => ({ spanish: r[0], korean: r[1], alt: r[2] || '' }))
+    );
     startSession();
   } catch (e) {
     document.getElementById('loadingMsg').textContent = '단어를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.';
