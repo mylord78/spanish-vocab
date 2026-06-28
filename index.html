@@ -55,6 +55,7 @@
       <!-- Quiz mode -->
       <div id="quizMode" class="mode-area hidden">
         <div class="quiz-card">
+          <div class="quiz-num" id="quizNum"></div>
           <div class="label">한국어 뜻</div>
           <div class="word" id="quizKorean"></div>
           <div class="input-wrap">
@@ -63,6 +64,27 @@
           </div>
           <div id="quizFeedback" class="feedback hidden"></div>
           <button id="quizNextBtn" class="btn secondary hidden">다음 →</button>
+        </div>
+      </div>
+
+      <!-- Results screen -->
+      <div id="resultsScreen" class="mode-area hidden">
+        <div class="results-card">
+          <div class="results-emoji" id="resultsEmoji"></div>
+          <div class="results-score" id="resultsScore"></div>
+          <div class="results-pct" id="resultsPct"></div>
+
+          <div class="results-section correct-section">
+            <h3>✓ 맞은 단어 <span id="correctList-count"></span></h3>
+            <ul id="correctList"></ul>
+          </div>
+
+          <div class="results-section wrong-section">
+            <h3>✗ 틀린 단어 <span id="wrongList-count"></span></h3>
+            <ul id="wrongList"></ul>
+          </div>
+
+          <button id="retryBtn" class="btn primary retry-btn">다시 시험보기</button>
         </div>
       </div>
     </main>

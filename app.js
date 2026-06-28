@@ -1,5 +1,6 @@
 const SHEET_ID = '1BxCgeiRRX2gfYTRqT7vCAZmTWXZuVPPFND27SA0tqSo';
 const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
+const QUIZ_SIZE = 10;
 
 let words = [];
 let deck = [];
@@ -7,6 +8,11 @@ let current = 0;
 let correctCount = 0;
 let wrongCount = 0;
 let mode = 'flashcard';
+
+// Quiz session state
+let quizSession = [];   // 10 words for current quiz
+let quizIndex = 0;      // current question index (0-9)
+let quizResults = [];   // { word, userInput, isCorrect }
 
 function parseCSV(text) {
   const rows = [];
@@ -40,7 +46,7 @@ async function loadWords() {
     const text = await res.text();
     const rows = parseCSV(text);
     words = rows
-      .slice(1) // 헤더 행 건너뜀
+      .slice(1)
       .filter(r => r[0] && r[1])
       .map(r => ({ spanish: r[0], korean: r[1], alt: r[2] || '' }));
     startSession();
@@ -67,43 +73,64 @@ function startSession() {
   updateScore();
   document.getElementById('loadingMsg').classList.add('hidden');
   showMode(mode);
-  renderCurrent();
+  if (mode === 'quiz') startQuiz();
+  else renderCurrent();
+}
+
+function startQuiz() {
+  quizSession = shuffle(words).slice(0, QUIZ_SIZE);
+  quizIndex = 0;
+  quizResults = [];
+  correctCount = 0;
+  wrongCount = 0;
+  updateScore();
+  updateQuizProgress();
+  document.getElementById('resultsScreen').classList.add('hidden');
+  document.getElementById('quizMode').classList.remove('hidden');
+  renderQuizQuestion();
 }
 
 function showMode(m) {
   mode = m;
   document.getElementById('flashcardMode').classList.toggle('hidden', m !== 'flashcard');
   document.getElementById('quizMode').classList.toggle('hidden', m !== 'quiz');
+  document.getElementById('resultsScreen').classList.add('hidden');
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.mode === m));
+  if (m === 'quiz') startQuiz();
 }
 
 function renderCurrent() {
   if (!deck.length) return;
   const item = deck[current];
   updateProgress();
+  document.getElementById('koreanWord').textContent = item.korean;
+  document.getElementById('spanishWord').textContent = item.spanish;
+  document.getElementById('altDef').textContent = item.alt ? `(${item.alt})` : '';
+  document.getElementById('card').classList.remove('flipped');
+}
 
-  if (mode === 'flashcard') {
-    document.getElementById('koreanWord').textContent = item.korean;
-    document.getElementById('spanishWord').textContent = item.spanish;
-    document.getElementById('altDef').textContent = item.alt ? `(${item.alt})` : '';
-    const card = document.getElementById('card');
-    card.classList.remove('flipped');
-  } else {
-    document.getElementById('quizKorean').textContent = item.korean;
-    document.getElementById('quizInput').value = '';
-    document.getElementById('quizInput').disabled = false;
-    document.getElementById('quizInput').focus();
-    const fb = document.getElementById('quizFeedback');
-    fb.classList.add('hidden');
-    fb.className = 'feedback hidden';
-    document.getElementById('quizNextBtn').classList.add('hidden');
-  }
+function renderQuizQuestion() {
+  const item = quizSession[quizIndex];
+  document.getElementById('quizNum').textContent = `${quizIndex + 1} / ${QUIZ_SIZE}`;
+  document.getElementById('quizKorean').textContent = item.korean;
+  document.getElementById('quizInput').value = '';
+  document.getElementById('quizInput').disabled = false;
+  document.getElementById('quizInput').focus();
+  const fb = document.getElementById('quizFeedback');
+  fb.className = 'feedback hidden';
+  document.getElementById('quizNextBtn').classList.add('hidden');
 }
 
 function updateProgress() {
   const pct = deck.length ? ((current / deck.length) * 100) : 0;
   document.getElementById('progressFill').style.width = pct + '%';
   document.getElementById('progressText').textContent = `${current} / ${deck.length}`;
+}
+
+function updateQuizProgress() {
+  const pct = QUIZ_SIZE ? ((quizIndex / QUIZ_SIZE) * 100) : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent = `${quizIndex} / ${QUIZ_SIZE}`;
 }
 
 function updateScore() {
@@ -134,25 +161,77 @@ function markDidntKnow() {
 }
 
 function checkQuiz() {
-  const input = document.getElementById('quizInput').value.trim().toLowerCase();
-  const answer = deck[current].spanish.trim().toLowerCase();
-  const isCorrect = input === answer;
+  const input = document.getElementById('quizInput').value.trim();
+  const item = quizSession[quizIndex];
+  const isCorrect = input.toLowerCase() === item.spanish.toLowerCase();
+
+  quizResults.push({ word: item, userInput: input, isCorrect });
 
   if (isCorrect) correctCount++;
   else wrongCount++;
   updateScore();
 
   const fb = document.getElementById('quizFeedback');
-  fb.classList.remove('hidden', 'correct-fb', 'wrong-fb');
-  if (isCorrect) {
-    fb.classList.add('correct-fb');
-    fb.textContent = `정답! ✓  "${deck[current].spanish}"`;
-  } else {
-    fb.classList.add('wrong-fb');
-    fb.textContent = `오답 ✗  정답: "${deck[current].spanish}"`;
-  }
+  fb.className = 'feedback ' + (isCorrect ? 'correct-fb' : 'wrong-fb');
+  fb.textContent = isCorrect
+    ? `정답! ✓  "${item.spanish}"`
+    : `오답 ✗  정답: "${item.spanish}"`;
+
   document.getElementById('quizInput').disabled = true;
-  document.getElementById('quizNextBtn').classList.remove('hidden');
+
+  const isLast = quizIndex === QUIZ_SIZE - 1;
+  const nextBtn = document.getElementById('quizNextBtn');
+  nextBtn.textContent = isLast ? '결과 보기 →' : '다음 →';
+  nextBtn.classList.remove('hidden');
+  updateQuizProgress();
+}
+
+function advanceQuiz() {
+  if (quizIndex === QUIZ_SIZE - 1) {
+    showResults();
+  } else {
+    quizIndex++;
+    updateQuizProgress();
+    renderQuizQuestion();
+  }
+}
+
+function showResults() {
+  document.getElementById('quizMode').classList.add('hidden');
+  document.getElementById('resultsScreen').classList.remove('hidden');
+
+  const total = quizResults.length;
+  const correct = quizResults.filter(r => r.isCorrect).length;
+  const wrong = total - correct;
+  const pct = Math.round((correct / total) * 100);
+
+  document.getElementById('progressFill').style.width = '100%';
+  document.getElementById('progressText').textContent = `${total} / ${total}`;
+
+  const emoji = pct === 100 ? '🎉' : pct >= 80 ? '👍' : pct >= 60 ? '😊' : pct >= 40 ? '😅' : '💪';
+  document.getElementById('resultsEmoji').textContent = emoji;
+  document.getElementById('resultsScore').textContent = `${correct} / ${total}`;
+  document.getElementById('resultsPct').textContent = `${pct}점`;
+
+  const correctItems = quizResults.filter(r => r.isCorrect);
+  const wrongItems = quizResults.filter(r => !r.isCorrect);
+
+  document.getElementById('correctList-count').textContent = `(${correctItems.length})`;
+  document.getElementById('wrongList-count').textContent = `(${wrongItems.length})`;
+
+  const correctList = document.getElementById('correctList');
+  correctList.innerHTML = correctItems.map(r =>
+    `<li><span class="res-korean">${r.word.korean}</span> → <span class="res-spanish">${r.word.spanish}</span></li>`
+  ).join('');
+
+  const wrongList = document.getElementById('wrongList');
+  wrongList.innerHTML = wrongItems.map(r =>
+    `<li>
+      <span class="res-korean">${r.word.korean}</span>
+      <span class="res-mine">${r.userInput ? `입력: "${r.userInput}"` : '(미입력)'}</span>
+      <span class="res-answer">정답: "${r.word.spanish}"</span>
+    </li>`
+  ).join('');
 }
 
 // Event listeners
@@ -166,21 +245,19 @@ document.getElementById('knewItBtn').addEventListener('click', markKnew);
 document.getElementById('didntKnowBtn').addEventListener('click', markDidntKnow);
 
 document.getElementById('checkBtn').addEventListener('click', checkQuiz);
-document.getElementById('quizNextBtn').addEventListener('click', goNext);
+document.getElementById('quizNextBtn').addEventListener('click', advanceQuiz);
 document.getElementById('quizInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') {
-    if (document.getElementById('quizInput').disabled) goNext();
+    if (document.getElementById('quizInput').disabled) advanceQuiz();
     else checkQuiz();
   }
 });
 
 document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    showMode(tab.dataset.mode);
-    renderCurrent();
-  });
+  tab.addEventListener('click', () => showMode(tab.dataset.mode));
 });
 
+document.getElementById('retryBtn').addEventListener('click', startQuiz);
 document.getElementById('shuffleCheck').addEventListener('change', startSession);
 
 loadWords();
