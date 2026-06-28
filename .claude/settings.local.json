@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "WebFetch(domain:docs.google.com)",
-      "WebFetch(domain:doc-0g-50-sheets.googleusercontent.com)"
+      "WebFetch(domain:doc-0g-50-sheets.googleusercontent.com)",
+      "Bash(npx playwright *)",
+      "Bash(node -e \"require\\('playwright'\\)\")",
+      "Bash(node *)",
+      "Bash(npm init *)",
+      "Bash(npm install *)"
     ]
   }
 }

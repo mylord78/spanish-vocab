@@ -16,27 +16,27 @@ let quizResults = [];   // { word, userInput, isCorrect }
 
 function parseCSV(text) {
   const rows = [];
-  const lines = text.split('\n');
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    const cols = [];
-    let inQuote = false;
-    let cell = '';
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        if (inQuote && line[i + 1] === '"') { cell += '"'; i++; }
-        else inQuote = !inQuote;
-      } else if (ch === ',' && !inQuote) {
-        cols.push(cell.trim());
-        cell = '';
-      } else {
-        cell += ch;
-      }
+  let row = [];
+  let cell = '';
+  let inQuote = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuote) {
+      if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (ch === '"') inQuote = false;
+      else cell += ch; // embedded newlines inside quotes are kept but ignored for display
+    } else {
+      if (ch === '"') { inQuote = true; }
+      else if (ch === ',') { row.push(cell.trim()); cell = ''; }
+      else if (ch === '\r' && text[i + 1] === '\n') {
+        row.push(cell.trim()); rows.push(row); row = []; cell = ''; i++;
+      } else if (ch === '\n') {
+        row.push(cell.trim()); rows.push(row); row = []; cell = '';
+      } else { cell += ch; }
     }
-    cols.push(cell.trim());
-    rows.push(cols);
   }
+  if (row.length > 0 || cell) { row.push(cell.trim()); rows.push(row); }
   return rows;
 }
 
