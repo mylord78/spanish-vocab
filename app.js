@@ -189,6 +189,7 @@ function markDidntKnow() {
 }
 
 function checkQuiz() {
+  if (document.getElementById('quizInput').disabled) return;
   const input = document.getElementById('quizInput').value.trim();
   const item = quizSession[quizIndex];
   const isCorrect = input.toLowerCase() === item.spanish.toLowerCase();
