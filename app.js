@@ -14,6 +14,7 @@ let mode = 'flashcard';
 let quizSession = [];   // 10 words for current quiz
 let quizIndex = 0;      // current question index (0-9)
 let quizResults = [];   // { word, userInput, isCorrect }
+let advanceTimer = null; // 확인 후 자동 전환 타이머 핸들
 
 function parseCSV(text) {
   const rows = [];
@@ -106,6 +107,7 @@ function startSession() {
 }
 
 function startQuiz() {
+  clearTimeout(advanceTimer);
   quizSession = shuffle(words).slice(0, QUIZ_SIZE);
   quizIndex = 0;
   quizResults = [];
@@ -119,6 +121,7 @@ function startQuiz() {
 }
 
 function showMode(m) {
+  clearTimeout(advanceTimer);
   mode = m;
   document.getElementById('flashcardMode').classList.toggle('hidden', m !== 'flashcard');
   document.getElementById('quizMode').classList.toggle('hidden', m !== 'quiz');
@@ -146,7 +149,6 @@ function renderQuizQuestion() {
   document.getElementById('quizInput').focus();
   const fb = document.getElementById('quizFeedback');
   fb.className = 'feedback hidden';
-  document.getElementById('quizNextBtn').classList.add('hidden');
 }
 
 function updateProgress() {
@@ -208,7 +210,7 @@ function checkQuiz() {
 
   document.getElementById('quizInput').disabled = true;
   updateQuizProgress();
-  setTimeout(advanceQuiz, 1200);
+  advanceTimer = setTimeout(advanceQuiz, 1200);
 }
 
 function advanceQuiz() {
@@ -270,7 +272,6 @@ document.getElementById('knewItBtn').addEventListener('click', markKnew);
 document.getElementById('didntKnowBtn').addEventListener('click', markDidntKnow);
 
 document.getElementById('checkBtn').addEventListener('click', checkQuiz);
-document.getElementById('quizNextBtn').addEventListener('click', advanceQuiz);
 document.getElementById('quizInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') checkQuiz();
 });
