@@ -69,7 +69,8 @@ async function fetchChunk(startRow, endRow) {
 async function loadWords() {
   try {
     const allWords = [];
-    for (let start = 2; ; start += CHUNK * 3) {
+    const MAX_ITER = 50; // 안전장치: 비정상 응답으로 인한 무한 루프 방지
+    for (let start = 2, iter = 0; iter < MAX_ITER; start += CHUNK * 3, iter++) {
       const [a, b, c] = await Promise.all([
         fetchChunk(start, start + CHUNK - 1),
         fetchChunk(start + CHUNK, start + CHUNK * 2 - 1),
@@ -123,6 +124,7 @@ function startQuiz() {
 }
 
 function showMode(m) {
+  if (!words.length) return; // 단어 로딩 완료 전에는 모드 전환 무시
   clearTimeout(advanceTimer);
   mode = m;
   document.getElementById('flashcardMode').classList.toggle('hidden', m !== 'flashcard');
@@ -148,7 +150,7 @@ function renderCurrent() {
 
 function renderQuizQuestion() {
   const item = quizSession[quizIndex];
-  document.getElementById('quizNum').textContent = `${quizIndex + 1} / ${QUIZ_SIZE}`;
+  document.getElementById('quizNum').textContent = `${quizIndex + 1} / ${quizSession.length}`;
   document.getElementById('quizKorean').textContent = item.korean;
   document.getElementById('quizInput').value = '';
   document.getElementById('quizInput').disabled = false;
@@ -164,9 +166,10 @@ function updateProgress() {
 }
 
 function updateQuizProgress() {
-  const pct = QUIZ_SIZE ? ((quizIndex / QUIZ_SIZE) * 100) : 0;
+  const qSize = quizSession.length;
+  const pct = qSize ? ((quizIndex / qSize) * 100) : 0;
   document.getElementById('progressFill').style.width = pct + '%';
-  document.getElementById('progressText').textContent = `${quizIndex} / ${QUIZ_SIZE}`;
+  document.getElementById('progressText').textContent = `${quizIndex} / ${qSize}`;
 }
 
 function updateScore() {
@@ -175,11 +178,13 @@ function updateScore() {
 }
 
 function goNext() {
+  if (!deck.length) return;
   current = (current + 1) % deck.length;
   renderCurrent();
 }
 
 function goPrev() {
+  if (!deck.length) return;
   current = (current - 1 + deck.length) % deck.length;
   renderCurrent();
 }
@@ -220,7 +225,7 @@ function checkQuiz() {
 }
 
 function advanceQuiz() {
-  if (quizIndex === QUIZ_SIZE - 1) {
+  if (quizIndex >= quizSession.length - 1) {
     showResults();
   } else {
     quizIndex++;
@@ -237,7 +242,7 @@ function showResults() {
   const total = quizResults.length;
   const correct = quizResults.filter(r => r.isCorrect).length;
   const wrong = total - correct;
-  const pct = Math.round((correct / total) * 100);
+  const pct = total ? Math.round((correct / total) * 100) : 0;
 
   document.getElementById('progressFill').style.width = '100%';
   document.getElementById('progressText').textContent = `${total} / ${total}`;
@@ -253,19 +258,34 @@ function showResults() {
   document.getElementById('correctList-count').textContent = `(${correctItems.length})`;
   document.getElementById('wrongList-count').textContent = `(${wrongItems.length})`;
 
+  const span = (cls, text) => {
+    const el = document.createElement('span');
+    el.className = cls;
+    el.textContent = text;
+    return el;
+  };
+
   const correctList = document.getElementById('correctList');
-  correctList.innerHTML = correctItems.map(r =>
-    `<li><span class="res-korean">${r.word.korean}</span> → <span class="res-spanish">${r.word.spanish}</span></li>`
-  ).join('');
+  correctList.replaceChildren(...correctItems.map(r => {
+    const li = document.createElement('li');
+    li.append(
+      span('res-korean', r.word.korean),
+      document.createTextNode(' → '),
+      span('res-spanish', r.word.spanish)
+    );
+    return li;
+  }));
 
   const wrongList = document.getElementById('wrongList');
-  wrongList.innerHTML = wrongItems.map(r =>
-    `<li>
-      <span class="res-korean">${r.word.korean}</span>
-      <span class="res-mine">${r.userInput ? `입력: "${r.userInput}"` : '(미입력)'}</span>
-      <span class="res-answer">정답: "${r.word.spanish}"</span>
-    </li>`
-  ).join('');
+  wrongList.replaceChildren(...wrongItems.map(r => {
+    const li = document.createElement('li');
+    li.append(
+      span('res-korean', r.word.korean),
+      span('res-mine', r.userInput ? `입력: "${r.userInput}"` : '(미입력)'),
+      span('res-answer', `정답: "${r.word.spanish}"`)
+    );
+    return li;
+  }));
 }
 
 // Event listeners
