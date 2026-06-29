@@ -207,12 +207,8 @@ function checkQuiz() {
     : `오답 ✗  정답: "${item.spanish}"`;
 
   document.getElementById('quizInput').disabled = true;
-
-  const isLast = quizIndex === QUIZ_SIZE - 1;
-  const nextBtn = document.getElementById('quizNextBtn');
-  nextBtn.textContent = isLast ? '결과 보기 →' : '다음 →';
-  nextBtn.classList.remove('hidden');
   updateQuizProgress();
+  setTimeout(advanceQuiz, 1200);
 }
 
 function advanceQuiz() {
@@ -276,10 +272,7 @@ document.getElementById('didntKnowBtn').addEventListener('click', markDidntKnow)
 document.getElementById('checkBtn').addEventListener('click', checkQuiz);
 document.getElementById('quizNextBtn').addEventListener('click', advanceQuiz);
 document.getElementById('quizInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    if (document.getElementById('quizInput').disabled) advanceQuiz();
-    else checkQuiz();
-  }
+  if (e.key === 'Enter') checkQuiz();
 });
 
 document.querySelectorAll('.tab').forEach(tab => {
