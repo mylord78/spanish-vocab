@@ -15,6 +15,7 @@ let quizSession = [];   // 10 words for current quiz
 let quizIndex = 0;      // current question index (0-9)
 let quizResults = [];   // { word, userInput, isCorrect }
 let advanceTimer = null; // 확인 후 자동 전환 타이머 핸들
+let quizActive = false;  // 퀴즈 진행 중 여부 (탭 복귀 시 이어가기 판단)
 
 function parseCSV(text) {
   const rows = [];
@@ -101,13 +102,14 @@ function startSession() {
   wrongCount = 0;
   updateScore();
   document.getElementById('loadingMsg').classList.add('hidden');
+  quizActive = false;        // 새 세션을 강제 (showMode가 startQuiz를 호출)
   showMode(mode);
-  if (mode === 'quiz') startQuiz();
-  else renderCurrent();
+  if (mode !== 'quiz') renderCurrent();
 }
 
 function startQuiz() {
   clearTimeout(advanceTimer);
+  quizActive = true;
   quizSession = shuffle(words).slice(0, QUIZ_SIZE);
   quizIndex = 0;
   quizResults = [];
@@ -127,7 +129,11 @@ function showMode(m) {
   document.getElementById('quizMode').classList.toggle('hidden', m !== 'quiz');
   document.getElementById('resultsScreen').classList.add('hidden');
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.mode === m));
-  if (m === 'quiz') startQuiz();
+  if (m === 'quiz') {
+    if (!quizActive) startQuiz();                                    // 진행 중인 퀴즈 없음 → 새로 시작
+    else if (document.getElementById('quizInput').disabled) advanceQuiz(); // 채점 직후 복귀 → 자동 전환 마저 진행
+    else renderQuizQuestion();                                       // 풀던 문제 그대로 이어가기
+  }
 }
 
 function renderCurrent() {
@@ -224,6 +230,7 @@ function advanceQuiz() {
 }
 
 function showResults() {
+  quizActive = false;
   document.getElementById('quizMode').classList.add('hidden');
   document.getElementById('resultsScreen').classList.remove('hidden');
 
