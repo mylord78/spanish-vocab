@@ -17,6 +17,33 @@ let quizResults = [];   // { word, userInput, isCorrect }
 let advanceTimer = null; // 확인 후 자동 전환 타이머 핸들
 let quizActive = false;  // 퀴즈 진행 중 여부 (탭 복귀 시 이어가기 판단)
 
+// localStorage 키 (스키마 변경 시 버전 숫자를 올려 무효화)
+const WORDS_KEY = 'vocab.words.v1';
+const PROGRESS_KEY = 'vocab.progress.v1';
+const WORDS_TTL = 24 * 60 * 60 * 1000; // 단어 캐시 유효기간 24시간
+
+// quota 초과·사생활 모드·손상 데이터 등에 대비해 항상 try/catch로 감쌈
+function lsGet(key) {
+  try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
+}
+function lsSet(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch { /* 저장 실패는 무시 */ }
+}
+
+function isValidWords(w) {
+  return Array.isArray(w) && w.length > 0 && w[0] && typeof w[0].spanish === 'string';
+}
+
+function saveProgress() {
+  if (!deck.length) return;
+  lsSet(PROGRESS_KEY, {
+    spanish: deck[current]?.spanish, // 위치는 인덱스가 아닌 단어로 저장 (섞기 순서 변동 대비)
+    correctCount,
+    wrongCount,
+    shuffle: document.getElementById('shuffleCheck').checked
+  });
+}
+
 function parseCSV(text) {
   const rows = [];
   let row = [];
@@ -67,6 +94,16 @@ async function fetchChunk(startRow, endRow) {
 }
 
 async function loadWords() {
+  const cached = lsGet(WORDS_KEY);
+
+  // 1) 캐시가 유효기간 내면 네트워크 요청 없이 즉시 사용
+  if (cached && isValidWords(cached.words) && (Date.now() - cached.t) < WORDS_TTL) {
+    words = cached.words;
+    startSession(true);
+    return;
+  }
+
+  // 2) 캐시 없음/만료 → 시트에서 새로 받아 저장
   try {
     const allWords = [];
     const MAX_ITER = 50; // 안전장치: 비정상 응답으로 인한 무한 루프 방지
@@ -80,9 +117,16 @@ async function loadWords() {
       if (c.length === 0) break; // 데이터가 연속적이므로 마지막 청크가 비면 종료
     }
     words = allWords;
-    startSession();
+    lsSet(WORDS_KEY, { t: Date.now(), words });
+    startSession(true);
   } catch (e) {
-    document.getElementById('loadingMsg').textContent = '단어를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.';
+    // 3) 네트워크 실패 시 만료된 캐시라도 있으면 사용 (오프라인 복원력)
+    if (cached && isValidWords(cached.words)) {
+      words = cached.words;
+      startSession(true);
+    } else {
+      document.getElementById('loadingMsg').textContent = '단어를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.';
+    }
   }
 }
 
@@ -95,12 +139,29 @@ function shuffle(arr) {
   return a;
 }
 
-function startSession() {
+function startSession(restore = false) {
+  const saved = restore ? lsGet(PROGRESS_KEY) : null;
+
+  // 저장된 섞기 설정을 덱 구성 전에 복원
+  if (saved && typeof saved.shuffle === 'boolean') {
+    document.getElementById('shuffleCheck').checked = saved.shuffle;
+  }
+
   const shouldShuffle = document.getElementById('shuffleCheck').checked;
   deck = shouldShuffle ? shuffle(words) : [...words];
   current = 0;
   correctCount = 0;
   wrongCount = 0;
+
+  if (saved) {
+    correctCount = Number(saved.correctCount) || 0;
+    wrongCount = Number(saved.wrongCount) || 0;
+    if (saved.spanish) {
+      const idx = deck.findIndex(w => w.spanish === saved.spanish);
+      if (idx >= 0) current = idx; // 저장된 단어가 덱에 있으면 그 위치부터 재개
+    }
+  }
+
   updateScore();
   document.getElementById('loadingMsg').classList.add('hidden');
   quizActive = false;        // 새 세션을 강제 (showMode가 startQuiz를 호출)
@@ -146,6 +207,7 @@ function renderCurrent() {
   document.getElementById('spanishWord').textContent = item.spanish;
   document.getElementById('altDef').textContent = item.alt ? `(${item.alt})` : '';
   document.getElementById('card').classList.remove('flipped');
+  saveProgress();
 }
 
 function renderQuizQuestion() {
@@ -308,6 +370,7 @@ document.querySelectorAll('.tab').forEach(tab => {
 });
 
 document.getElementById('retryBtn').addEventListener('click', startQuiz);
-document.getElementById('shuffleCheck').addEventListener('change', startSession);
+// 섞기 토글은 새 세션으로 다시 시작 (이벤트 객체가 restore 인자로 새지 않도록 래핑)
+document.getElementById('shuffleCheck').addEventListener('change', () => startSession());
 
 loadWords();
